@@ -1,27 +1,50 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Search, X } from 'lucide-react';
-import { useMovieSearch } from '@/hooks/useMovieSearch';
+import { useMovieSearch, MovieSearchFilters } from '@/hooks/useMovieSearch';
 import { useAddMoviePick, useMoviePicks } from '@/hooks/useMoviePicks';
 import { useRole } from '@/lib/roleContext';
 import { MovieCard, MovieCardSkeleton } from './MovieCard';
+import { MovieFilters, MovieFiltersState } from './MovieFilters';
 import { toast } from 'sonner';
 
 export function MovieSearch() {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [filters, setFilters] = useState<MovieFiltersState>({
+    genre: '',
+    year: '',
+    language: '',
+    actor: '',
+  });
+  const [debouncedFilters, setDebouncedFilters] = useState<MovieSearchFilters>({});
+  
   const { role } = useRole();
-  const { data: searchResults, isLoading: isSearching } = useMovieSearch(debouncedQuery);
+  const { data: searchResults, isLoading: isSearching } = useMovieSearch(debouncedFilters);
   const { data: picks } = useMoviePicks();
   const addPick = useAddMoviePick();
 
-  // Debounce search
+  // Debounce search query
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedQuery(query);
     }, 300);
     return () => clearTimeout(timer);
   }, [query]);
+
+  // Debounce actor filter separately (longer delay)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedFilters({
+        query: debouncedQuery || undefined,
+        genre: filters.genre || undefined,
+        year: filters.year || undefined,
+        language: filters.language || undefined,
+        actor: filters.actor || undefined,
+      });
+    }, filters.actor !== debouncedFilters.actor ? 500 : 100);
+    return () => clearTimeout(timer);
+  }, [debouncedQuery, filters]);
 
   const handleAddMovie = async (movie: any) => {
     if (!role) {
@@ -48,13 +71,15 @@ export function MovieSearch() {
     return picks?.some(p => p.tmdb_id === tmdbId && p.added_by === role);
   };
 
+  const hasActiveSearch = debouncedQuery.length >= 2 || filters.genre || filters.year || filters.language || (filters.actor?.length ?? 0) >= 2;
+
   return (
     <div className="w-full max-w-2xl mx-auto">
       {/* Search Input */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative mb-8"
+        className="relative mb-4"
       >
         <div className="glass-card rounded-2xl p-1 flex items-center">
           <Search className="w-5 h-5 text-muted-foreground ml-4" />
@@ -74,6 +99,16 @@ export function MovieSearch() {
             </button>
           )}
         </div>
+      </motion.div>
+
+      {/* Filters */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.1 }}
+        className="mb-8"
+      >
+        <MovieFilters filters={filters} onChange={setFilters} />
       </motion.div>
 
       {/* Results */}
@@ -97,24 +132,24 @@ export function MovieSearch() {
           />
         ))}
 
-        {!isSearching && query.length >= 2 && searchResults?.results.length === 0 && (
+        {!isSearching && hasActiveSearch && searchResults?.results.length === 0 && (
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             className="text-center text-muted-foreground py-12"
           >
-            No movies found for "{query}"
+            No movies found with the selected filters
           </motion.p>
         )}
 
-        {!query && (
+        {!hasActiveSearch && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             className="text-center py-16"
           >
             <p className="text-muted-foreground/60">
-              Search for movies you'd like to watch together
+              Search for movies or use filters to discover together
             </p>
           </motion.div>
         )}
